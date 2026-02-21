@@ -1,0 +1,26 @@
+{
+  "valid_customer": {
+    "firstName":  "Vivek",
+    "lastName":   "Singh",
+    "postalCode": "201301",
+    "description": "Valid customer data for happy-path checkout"
+  },
+  "international_customer": {
+    "firstName":  "John",
+    "lastName":   "Doe",
+    "postalCode": "10001",
+    "description": "US-based customer for international checkout flow"
+  },
+  "missing_firstname": {
+    "firstName":  "",
+    "lastName":   "Singh",
+    "postalCode": "201301",
+    "description": "Missing first name — triggers validation error"
+  },
+  "missing_postal": {
+    "firstName":  "Vivek",
+    "lastName":   "Singh",
+    "postalCode": "",
+    "description": "Missing postal code — triggers validation error"
+  }
+}

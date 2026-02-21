@@ -1,0 +1,23 @@
+# Maven
+target/
+*.class
+
+# Environment — NEVER commit real credentials
+config/.env
+*.env
+
+# IDE
+.idea/
+*.iml
+.eclipse/
+.vscode/
+
+# Reports (generated on run)
+target/reports/
+target/cucumber-reports/
+target/screenshots/
+target/logs/
+
+# OS
+.DS_Store
+Thumbs.db

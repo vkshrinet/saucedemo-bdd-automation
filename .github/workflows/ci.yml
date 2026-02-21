@@ -1,0 +1,81 @@
+name: SauceDemo BDD Automation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run regression suite every night at 2am UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        # Run on multiple browsers for cross-browser coverage
+        browser: [chrome, firefox]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Install Chrome / Firefox
+        run: |
+          if [ "${{ matrix.browser }}" = "chrome" ]; then
+            sudo apt-get update && sudo apt-get install -y google-chrome-stable
+          else
+            sudo apt-get update && sudo apt-get install -y firefox
+          fi
+
+      - name: Run BDD Tests
+        env:
+          BROWSER:     ${{ matrix.browser }}
+          HEADLESS:    true
+          BASE_URL:    https://www.saucedemo.com
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          mvn test \
+            -Dbrowser=${{ matrix.browser }} \
+            -Dheadless=true \
+            -Denv=qa \
+            -Dcucumber.filter.tags="not @wip"
+
+      - name: Upload Test Reports
+        uses: actions/upload-artifact@v4
+        if: always()   # Upload even if tests fail
+        with:
+          name: cucumber-reports-${{ matrix.browser }}
+          path: target/cucumber-reports/
+          retention-days: 14
+
+      - name: Upload Screenshots on Failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: failure-screenshots-${{ matrix.browser }}
+          path: target/screenshots/
+          retention-days: 7
+
+      - name: Publish Test Summary
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: BDD Test Results (${{ matrix.browser }})
+          path: target/cucumber-reports/*.json
+          reporter: java-junit
