@@ -75,7 +75,7 @@ saucedemo-bdd/
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/vivekks/saucedemo-bdd.git
+git clone https://github.com/vkshrinet/saucedemo-bdd-automation.git
 cd saucedemo-bdd
 ```
 
