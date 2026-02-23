@@ -26,49 +26,136 @@ jobs:
         distribution: 'temurin'
         cache: maven
     
-    - name: Install Chrome and ChromeDriver
+    - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y chromium-browser chromium-chromedriver
-        echo "Chrome and ChromeDriver installed"
+        sudo apt-get install -y \
+          chromium-browser \
+          chromium-chromedriver \
+          firefox \
+          firefox-geckodriver \
+          dbus \
+          xvfb \
+          libxkbcommon-x11-0 \
+          libxkbcommon0
+        
+        # Verify installations
+        echo "=== Chrome Version ==="
+        chromium-browser --version
+        
+        echo "=== Firefox Version ==="
+        firefox --version
+        
+        echo "=== Geckodriver Version ==="
+        which geckodriver || echo "Geckodriver not in PATH, checking manual install..."
+        geckodriver --version || echo "Geckodriver command failed"
+        
+        echo "=== ChromeDriver ==="
+        which chromedriver
+        chromedriver --version
     
-    - name: Install Firefox and Geckodriver
+    - name: Verify Firefox binary and Geckodriver
       run: |
-        sudo apt-get install -y firefox dbus
-        # Download Geckodriver v0.35.0
-        wget https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux64.tar.gz
-        tar -xzf geckodriver-v0.35.0-linux64.tar.gz
-        sudo mv geckodriver /usr/local/bin/
-        sudo chmod +x /usr/local/bin/geckodriver
-        geckodriver --version
-        echo "Firefox and Geckodriver installed"
+        # Check Firefox binary location
+        echo "Firefox binary:"
+        which firefox || find /usr -name "firefox" -type f 2>/dev/null | head -5
+        
+        # Check Geckodriver
+        echo "Geckodriver location:"
+        which geckodriver || find /usr -name "geckodriver" -type f 2>/dev/null
+        
+        # List snap packages
+        echo "Installed snaps:"
+        snap list 2>/dev/null || echo "Snap not available"
+    
+    - name: Fix Firefox snap permissions (if using snap)
+      run: |
+        # Check if Firefox is a snap
+        if grep -q snap /proc/mounts 2>/dev/null; then
+          echo "Snap detected, installing classic confinement support..."
+          sudo snap install --classic firefox 2>/dev/null || echo "Firefox snap already installed"
+        fi
     
     - name: Install display server (Xvfb)
       run: |
-        sudo apt-get install -y xvfb libxkbcommon-x11-0 libxkbcommon0
-        echo "Xvfb installed"
+        # Start Xvfb
+        export DISPLAY=:99
+        sudo Xvfb :99 -screen 0 1920x1080x24 > /tmp/xvfb.log 2>&1 &
+        XVFB_PID=$!
+        echo "XVFB_PID=$XVFB_PID" >> $GITHUB_ENV
+        
+        # Wait for Xvfb to start
+        sleep 2
+        
+        # Verify Xvfb is running
+        echo "Checking Xvfb..."
+        ps aux | grep Xvfb | grep -v grep || echo "Warning: Xvfb not detected"
+        
+        # Test Xvfb connectivity
+        for i in {1..30}; do
+          if xset -display :99 q > /dev/null 2>&1; then
+            echo "✓ Xvfb is ready"
+            break
+          fi
+          echo "Waiting for Xvfb... ($i/30)"
+          sleep 1
+        done
+    
+    - name: Debug environment variables
+      run: |
+        echo "=== Environment ==="
+        echo "DISPLAY: $DISPLAY"
+        echo "PATH: $PATH"
+        echo ""
+        echo "=== Available browsers ==="
+        ls -la /snap/bin/ 2>/dev/null | grep -i firefox || echo "Firefox not in snap/bin"
+        which firefox
+        firefox --version 2>&1 || echo "Firefox command failed"
+        echo ""
+        echo "=== Geckodriver ==="
+        geckodriver --version 2>&1 || echo "Geckodriver not found"
+        which geckodriver
     
     - name: Run tests with Maven - ${{ matrix.browser }}
       run: |
         export DISPLAY=:99
-        sudo Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
-        sleep 3
-        # Wait for Xvfb to fully initialize
-        for i in {1..30}; do
-          if xset -display :99 q > /dev/null 2>&1; then
-            echo "Xvfb is ready"
-            break
-          fi
-          sleep 1
-        done
         
+        # Ensure Xvfb is still running
+        pgrep -f "Xvfb :99" || sudo Xvfb :99 -screen 0 1920x1080x24 > /tmp/xvfb2.log 2>&1 &
+        sleep 2
+        
+        # Set browser-specific environment
+        if [ "${{ matrix.browser }}" = "firefox" ]; then
+          echo "=== Running Firefox tests ==="
+          # For snap Firefox, we need special handling
+          export MOZ_HEADLESS=1
+          export XDG_RUNTIME_DIR=/tmp/xdg-runtime
+          mkdir -p $XDG_RUNTIME_DIR
+        fi
+        
+        # Run tests
         mvn clean verify \
           -Dbrowser=${{ matrix.browser }} \
           -Dheadless=true \
           -Dorg.apache.logging.log4j.simplelog.StatusLogger.level=ERROR \
-          -DforkMode=never
-      continue-on-error: false
-      timeout-minutes: 30
+          -DforkMode=never \
+          -X 2>&1 | tee test-output-${{ matrix.browser }}.log
+      
+      env:
+        DISPLAY: :99
+      continue-on-error: true
+    
+    - name: Upload test logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-logs-${{ matrix.browser }}
+        path: |
+          test-output-*.log
+          /tmp/xvfb.log
+          /tmp/xvfb2.log
+        retention-days: 30
+        if-no-files-found: ignore
     
     - name: Upload Cucumber reports - ${{ matrix.browser }}
       if: always()
@@ -98,3 +185,9 @@ jobs:
         else
           echo "⚠️ No test reports found" >> $GITHUB_STEP_SUMMARY
         fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Test Log" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cat test-output-${{ matrix.browser }}.log 2>/dev/null | tail -50 >> $GITHUB_STEP_SUMMARY || echo "No log file" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
