@@ -10,6 +10,7 @@ import org.openqa.selenium.edge.EdgeDriver;
 import org.openqa.selenium.edge.EdgeOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.time.Duration;
 
 /**
  * DriverFactory — centralizes WebDriver creation and teardown.
@@ -22,6 +23,7 @@ public class DriverFactory {
 
     private static final Logger log = LoggerFactory.getLogger(DriverFactory.class);
     private static final ThreadLocal<WebDriver> driverThreadLocal = new ThreadLocal<>();
+    private static final int TIMEOUT_SECONDS = 10;
 
     private DriverFactory() { }
 
@@ -49,6 +51,7 @@ public class DriverFactory {
         }
 
         driver.manage().window().maximize();
+        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(TIMEOUT_SECONDS));
         driverThreadLocal.set(driver);
         log.info("Driver initialised: {}", driver.getClass().getSimpleName());
     }
@@ -85,34 +88,84 @@ public class DriverFactory {
 
     // ── Private factory methods ───────────────────────────────────────────────
 
+    /**
+     * Create Chrome WebDriver with appropriate options for CI/CD and local environments
+     */
     private static WebDriver createChromeDriver(boolean headless) {
         WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
+        
         if (headless) {
             options.addArguments("--headless=new");
         }
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
-        options.addArguments("--disable-gpu");
-        options.addArguments("--window-size=1920,1080");
+        
+        // Essential Chrome arguments for CI/CD environments
+        options.addArguments(
+            "--no-sandbox",                    // Required for CI/CD
+            "--disable-dev-shm-usage",         // Use /tmp instead of /dev/shm (limited in containers)
+            "--disable-gpu",                   // Disable GPU acceleration
+            "--disable-software-rasterizer",
+            "--disable-extensions",
+            "--window-size=1920,1080",
+            "--start-maximized",
+            "--disable-blink-features=AutomationControlled"
+        );
+        
+        options.setAcceptInsecureCerts(true);
+        
+        log.info("Chrome options configured for headless={}", headless);
         return new ChromeDriver(options);
     }
 
+    /**
+     * Create Firefox WebDriver with proper headless mode support
+     * 
+     * Firefox in headless mode requires special configuration:
+     * - Browser preferences must be set for headless stability
+     * - Marionette protocol must be enabled
+     * - CI/CD environment arguments must be configured
+     */
     private static WebDriver createFirefoxDriver(boolean headless) {
         WebDriverManager.firefoxdriver().setup();
         FirefoxOptions options = new FirefoxOptions();
+        
         if (headless) {
             options.addArguments("--headless");
         }
+        
+        // Essential Firefox arguments for CI/CD environments
+        options.addArguments(
+            "--no-sandbox",                    // Required for containers
+            "--disable-dev-shm-usage"          // Use /tmp instead of /dev/shm
+        );
+        
+        options.setAcceptInsecureCerts(true);
+        
+        log.info("Firefox options configured for headless={}", headless);
         return new FirefoxDriver(options);
     }
 
+    /**
+     * Create Edge WebDriver with appropriate options
+     */
     private static WebDriver createEdgeDriver(boolean headless) {
         WebDriverManager.edgedriver().setup();
         EdgeOptions options = new EdgeOptions();
+        
         if (headless) {
             options.addArguments("--headless=new");
         }
+        
+        // Essential Edge arguments for CI/CD environments
+        options.addArguments(
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu"
+        );
+        
+        options.setAcceptInsecureCerts(true);
+        
+        log.info("Edge options configured for headless={}", headless);
         return new EdgeDriver(options);
     }
 }
