@@ -126,6 +126,27 @@
                 </configuration>
             </plugin>
 
+            <!-- Cucumber Maven Plugin - Generates JSON report -->
+            <plugin>
+                <groupId>io.cucumber</groupId>
+                <artifactId>cucumber-maven-plugin</artifactId>
+                <version>${cucumber.version}</version>
+                <executions>
+                    <execution>
+                        <id>execution-test</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>generateReport</goal>
+                        </goals>
+                        <configuration>
+                            <cucumberOutputDir>target/cucumber-reports</cucumberOutputDir>
+                            <cucumberReportFile>cucumber.json</cucumberReportFile>
+                            <parallelTesting>false</parallelTesting>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- Compiler -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
