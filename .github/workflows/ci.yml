@@ -32,10 +32,16 @@ jobs:
         sudo apt-get install -y chromium-browser chromium-chromedriver
         echo "Chrome installed"
     
-    - name: Install system dependencies for Firefox
+    - name: Install system dependencies for Firefox and Geckodriver
       run: |
-        sudo apt-get install -y firefox firefox-geckodriver
-        echo "Firefox installed"
+        sudo apt-get install -y firefox
+        # Install Geckodriver separately
+        wget https://github.com/mozilla/geckodriver/releases/download/v0.33.3/geckodriver-v0.33.3-linux64.tar.gz
+        tar -xzf geckodriver-v0.33.3-linux64.tar.gz
+        sudo mv geckodriver /usr/local/bin/
+        sudo chmod +x /usr/local/bin/geckodriver
+        geckodriver --version
+        echo "Firefox and Geckodriver installed"
     
     - name: Install display server
       run: |
