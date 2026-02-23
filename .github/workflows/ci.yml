@@ -26,16 +26,16 @@ jobs:
         distribution: 'temurin'
         cache: maven
     
-    - name: Install system dependencies for Chrome
+    - name: Install Chrome and ChromeDriver
       run: |
         sudo apt-get update
         sudo apt-get install -y chromium-browser chromium-chromedriver
-        echo "Chrome installed"
+        echo "Chrome and ChromeDriver installed"
     
-    - name: Install system dependencies for Firefox and Geckodriver
+    - name: Install Firefox and Geckodriver
       run: |
-        sudo apt-get install -y firefox
-        # Install Geckodriver - using v0.35.0 (latest stable)
+        sudo apt-get install -y firefox dbus
+        # Download Geckodriver v0.35.0
         wget https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux64.tar.gz
         tar -xzf geckodriver-v0.35.0-linux64.tar.gz
         sudo mv geckodriver /usr/local/bin/
@@ -43,21 +43,32 @@ jobs:
         geckodriver --version
         echo "Firefox and Geckodriver installed"
     
-    - name: Install display server
+    - name: Install display server (Xvfb)
       run: |
-        sudo apt-get install -y xvfb
+        sudo apt-get install -y xvfb libxkbcommon-x11-0 libxkbcommon0
         echo "Xvfb installed"
     
     - name: Run tests with Maven - ${{ matrix.browser }}
       run: |
         export DISPLAY=:99
         sudo Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
-        sleep 2
+        sleep 3
+        # Wait for Xvfb to fully initialize
+        for i in {1..30}; do
+          if xset -display :99 q > /dev/null 2>&1; then
+            echo "Xvfb is ready"
+            break
+          fi
+          sleep 1
+        done
+        
         mvn clean verify \
           -Dbrowser=${{ matrix.browser }} \
           -Dheadless=true \
-          -Dorg.apache.logging.log4j.simplelog.StatusLogger.level=ERROR
+          -Dorg.apache.logging.log4j.simplelog.StatusLogger.level=ERROR \
+          -DforkMode=never
       continue-on-error: false
+      timeout-minutes: 30
     
     - name: Upload Cucumber reports - ${{ matrix.browser }}
       if: always()
@@ -66,6 +77,7 @@ jobs:
         name: cucumber-reports-${{ matrix.browser }}
         path: target/cucumber-reports/
         retention-days: 30
+        if-no-files-found: ignore
     
     - name: Upload Surefire reports - ${{ matrix.browser }}
       if: always()
@@ -74,11 +86,15 @@ jobs:
         name: surefire-reports-${{ matrix.browser }}
         path: target/surefire-reports/
         retention-days: 30
+        if-no-files-found: ignore
     
-    - name: Upload test output - ${{ matrix.browser }}
+    - name: Publish Test Results Summary
       if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-output-${{ matrix.browser }}
-        path: test-output/
-        retention-days: 30
+      run: |
+        echo "## Test Results - ${{ matrix.browser }}" >> $GITHUB_STEP_SUMMARY
+        if [ -d target/surefire-reports ]; then
+          echo "✅ Test reports generated" >> $GITHUB_STEP_SUMMARY
+          ls -la target/surefire-reports/ >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ No test reports found" >> $GITHUB_STEP_SUMMARY
+        fi
