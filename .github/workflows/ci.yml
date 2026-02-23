@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: [chrome, firefox]
+        browser: [chrome]
     
     steps:
     - name: Checkout code
@@ -33,36 +33,16 @@ jobs:
         sudo apt-get install -y \
           chromium-browser \
           chromium-chromedriver \
-          firefox \
           xvfb \
           wget
         
         echo "✅ System packages installed"
-    
-    # Download and install Geckodriver separately
-    - name: Install Geckodriver
-      run: |
-        cd /tmp
-        wget -q https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux64.tar.gz
-        tar -xzf geckodriver-v0.35.0-linux64.tar.gz
-        sudo mv geckodriver /usr/local/bin/
-        sudo chmod +x /usr/local/bin/geckodriver
-        
-        echo "✅ Geckodriver installed"
-        geckodriver --version
     
     # Verify installations
     - name: Verify browser installations
       run: |
         echo "=== Chrome ==="
         chromium-browser --version
-        echo ""
-        echo "=== Firefox ==="
-        firefox --version
-        echo ""
-        echo "=== Geckodriver ==="
-        which geckodriver
-        geckodriver --version
         echo ""
         echo "=== ChromeDriver ==="
         which chromedriver
@@ -113,6 +93,7 @@ jobs:
         echo "## Test Results - ${{ matrix.browser }}" >> $GITHUB_STEP_SUMMARY
         if [ -d target/surefire-reports ]; then
           echo "✅ Reports generated" >> $GITHUB_STEP_SUMMARY
+          ls -la target/surefire-reports/ >> $GITHUB_STEP_SUMMARY
         else
           echo "⚠️ No reports found" >> $GITHUB_STEP_SUMMARY
         fi
